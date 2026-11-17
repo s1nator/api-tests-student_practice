@@ -2,15 +2,19 @@ package api_runner
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
 	"path"
+	"time"
 
 	"github.com/steinfletcher/apitest"
 )
 
 const (
+	requestInterval  = 300 * time.Millisecond
+	requestTimeout   = 30 * time.Second
 	defaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
 )
 
@@ -38,12 +42,16 @@ func (at *ApiTest) Auth(token string) *ApiTest {
 }
 
 func (at *ApiTest) Create() *apitest.APITest {
-	apitestNew := apitest.New().EnableNetworking()
+	apitestNew := apitest.New().EnableNetworking(&http.Client{Timeout: requestTimeout})
 	if os.Getenv("DEBUG") == "true" {
-		apitestNew = apitestNew.Debug()
+		apitestNew = apitestNew.Observe(func(response *http.Response, request *http.Request, _ *apitest.APITest) {
+			// Не логируем тела и заголовки: они содержат пароль и токен.
+			slog.Info("HTTP response", "method", request.Method, "path", request.URL.Path, "status", response.StatusCode)
+		})
 	}
 	return apitestNew.
 		Intercept(func(request *http.Request) {
+			time.Sleep(requestInterval)
 			request.Header.Set("User-Agent", at.userAgent)
 
 			if err := mergeServiceUrls(at.host, request.URL); err != nil {
