@@ -1,61 +1,54 @@
 package advertisementssearch
 
 import (
-	"api-tests-template/internal/assertions"
-	advList "api-tests-template/internal/managers/advertisements"
-	"api-tests-template/internal/managers/auth"
-	"api-tests-template/internal/managers/auth/models"
-	"api-tests-template/internal/utils"
-	base "api-tests-template/tests"
+	"bytes"
+	"image"
+	"image/png"
 	"os"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
+	"github.com/tidwall/gjson"
+
+	"api-tests-template/internal/assertions"
+	advList "api-tests-template/internal/managers/advertisements"
+	"api-tests-template/internal/managers/auth"
+	"api-tests-template/internal/utils"
+	base "api-tests-template/tests"
 )
 
-type TestSuite struct {
-	suite.Suite
-	loginData models.LoginOkResponse
-}
-
-func TestSuiteRun(t *testing.T) {
-	suite.Run(t, &TestSuite{})
-}
-
-const (
-	existingAdTitle = "вулкан"
-	searchBeginning = "ву"
-	searchMiddle    = "лк"
-	searchEnd       = "ан"
-)
-
-func (s *TestSuite) SetupSuite() {
+func TestSearchByTitleSubstring(t *testing.T) {
 	base.SetupSuite()
-	base.Precondition("Проверяем, что константы заданы")
-	require.NotEmpty(s.T(), existingAdTitle, "вулкан")
-	require.NotEmpty(s.T(), searchBeginning, "ву")
-	require.NotEmpty(s.T(), searchMiddle, "лк")
-	require.NotEmpty(s.T(), searchEnd, "ан")
-	s.loginData = auth.Login(s.T(), os.Getenv("TEST_LOGIN"), os.Getenv("TEST_PASSWORD"))
-}
-func (s *TestSuite) TestSearchByTitle_Substring() {
-	cases := []struct {
-		name   string
-		search string
-	}{
-		{"начало", searchBeginning},
-		{"середина", searchMiddle},
-		{"конец", searchEnd},
-		{"нижний регистр", strings.ToLower(searchMiddle)},
-		{"верхний регистр", strings.ToUpper(searchMiddle)},
-		{"смешанный регистр", utils.MixCase(searchMiddle)},
+	t.Log("Подготовка: авторизация и создание уникального объявления")
+	token := auth.Login(t, os.Getenv("TEST_LOGIN"), os.Getenv("TEST_PASSWORD")).Token
+	beginning := utils.RandomString(10)
+	middle := "Вулкан-" + utils.RandomString(10)
+	end := utils.RandomString(10)
+	title := beginning + "-" + middle + "-" + end
+	var photo bytes.Buffer
+	require.NoError(t, png.Encode(&photo, image.NewRGBA(image.Rect(0, 0, 8, 8))))
+	body := advList.Create(t, token, map[string]string{"title": title, "description": "Проверка поиска по подстроке", "price": "10", "quantity": "1"}, [][]byte{photo.Bytes()}, 201)
+	id := gjson.Get(body, "id").String()
+	require.NotEmpty(t, id)
+	t.Cleanup(func() {
+		t.Log("Очистка: удаление тестового объявления")
+		advList.Delete(t, token, id, 204)
+	})
+	cases := []struct{ name, search string }{
+		{"начало", beginning},
+		{"середина", middle},
+		{"конец", end},
+		{"нижний регистр", strings.ToLower(middle)},
+		{"верхний регистр", strings.ToUpper(middle)},
+		{"смешанный регистр", utils.MixCase(middle)},
 	}
 	for _, tc := range cases {
-		s.Run(tc.name, func() {
-			list := advList.GetAdvertisementsList(s.T(), s.loginData.Token, tc.search)
-			assertions.ContainsAdvertisementByTitle(s.T(), list.Items, existingAdTitle)
+		t.Run(tc.name, func(t *testing.T) {
+			t.Log("Шаг: поиск по подстроке названия")
+			list := advList.GetAdvertisementsList(t, token, tc.search)
+			assertions.ContainsAdvertisementByTitle(t, list.Items, title)
+			t.Log("Результат: созданное объявление найдено")
 		})
 	}
 }
