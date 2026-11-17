@@ -1,21 +1,21 @@
 package assertions
 
 import (
-    "testing"
+	"testing"
 
-    "github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/require"
 
-    "api-tests-template/internal/managers/advertisements/models"
+	"api-tests-template/internal/managers/advertisements/models"
 )
 
 func ContainsAdvertisementByTitle(t *testing.T, items []models.Advertisement, title string) {
-    t.Helper()
+	t.Helper()
 
-    for _, item := range items {
-        if item.Title == title {
-            return
-        }
-    }
+	for _, item := range items {
+		if item.Title == title {
+			return
+		}
+	}
 
-    require.Failf(t, "Объявление не найдено", "В ответе нет объявления с названием %q", title)
+	require.Failf(t, "Объявление не найдено", "В ответе нет объявления с названием %q", title)
 }
